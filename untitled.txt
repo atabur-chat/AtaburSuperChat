@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Atabur Super Chat</title>
+    <style>
+        /* --- THEMES --- */
+        :root { --app-primary: #2563eb; --app-bg: #ffffff; --app-text: #000000; --chat-bg: #eff6ff; --input-bg: #f0f2f5; --border-color: #f0f0f0; --item-hover: #f9f9f9; --modal-bg: #ffffff; }
+        [data-theme="dark"] { --app-primary: #3b82f6; --app-bg: #111827; --app-text: #ffffff; --chat-bg: #0f172a; --input-bg: #1f2937; --border-color: #374151; --item-hover: #1e293b; --modal-bg: #1f2937; }
+        
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--app-bg); color: var(--app-text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; user-select: none; -webkit-user-select: none; }
+        img { -webkit-touch-callout: none !important; pointer-events: auto !important; }
+
+        /* --- SPLASH SCREEN --- */
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--app-primary); z-index: 20000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; transition: opacity 0.4s ease;
+        }
+        .splash-logo { font-size: 40px; font-weight: bold; letter-spacing: 2px; margin-bottom: 25px; text-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .splash-spinner {
+            width: 45px; height: 45px; border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white; border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* UI ELEMENTS */
+        .header { background: var(--app-primary); padding: 15px; display: flex; justify-content: space-between; align-items: center; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10; }
+        .tabs { display: flex; background: var(--app-primary); color: rgba(255,255,255,0.7); }
+        .tab { flex: 1; text-align: center; padding: 15px 0; font-weight: bold; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab.active { color: white; border-bottom: 3px solid white; background: rgba(255,255,255,0.1); }
+        
+        #content { flex: 1; overflow-y: auto; position: relative; }
+        .page { display: none; flex-direction: column; height: 100%; }
+        .page.active { display: flex; }
+
+        .chat-row { display: flex; align-items: center; padding: 15px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: 0.1s; }
+        .chat-row:active { background: var(--item-hover); transform: scale(0.98); }
+        
+        .avatar { width: 50px; height: 50px; border-radius: 50%; background: #e0e7ff; color: #2563eb; margin-right: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; overflow: hidden; flex-shrink: 0; position: relative; border: 1px solid #ccc; }
+        .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .online-dot { width: 12px; height: 12px; background: #22c55e; border: 2px solid white; border-radius: 50%; position: absolute; bottom: 2px; right: 2px; display: none; z-index: 5; }
+        
+        /* STATUS */
+        .st-ring { width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--app-primary); padding: 2px; margin-right: 15px; flex-shrink: 0; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        .st-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .st-text-preview { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; text-align: center; line-height: 1; }
+        .status-actions { margin-top: 5px; display: flex; gap: 15px; font-size: 14px; }
+        .st-btn { color: var(--app-primary); font-weight: bold; cursor: pointer; background: var(--input-bg); padding: 5px 10px; border-radius: 15px; }
+
+        /* CHAT ROOM */
+        #page-chat-room { background: var(--chat-bg); z-index: 20; position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; }
+        .room-header { background: var(--app-bg); padding: 10px 15px; display: flex; align-items: center; border-bottom: 1px solid var(--border-color); }
+        .room-body { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        
+        .msg-row { display: flex; width: 100%; margin-bottom: 10px; }
+        .msg-row.me { justify-content: flex-end; } .msg-row.other { justify-content: flex-start; }
+        .msg-bubble { padding: 10px 14px; border-radius: 12px; max-width: 75%; position: relative; word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .me .msg-bubble { background: var(--app-primary); color: white; border-bottom-right-radius: 2px; }
+        .other .msg-bubble { background: var(--input-bg); color: var(--app-text); border: 1px solid var(--border-color); border-bottom-left-radius: 2px; }
+        .msg-bubble img { max-width: 100%; border-radius: 8px; margin-top: 5px; cursor: pointer; }
+        
+        .msg-avatar { width: 30px; height: 30px; border-radius: 50%; margin-right: 8px; overflow: hidden; background: #ccc; flex-shrink: 0; }
+        .msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+        .msg-footer { display: flex; justify-content: flex-end; align-items: center; margin-top: 5px; gap: 8px; }
+        .del-btn { font-size: 16px; color: #ffcccc; cursor: pointer; padding: 5px; } 
+        .other .del-btn { color: red; } 
+        .kick-btn { color: red; border: 1px solid red; padding: 2px 6px; font-size: 10px; border-radius: 4px; margin-left: 5px; cursor: pointer; font-weight: bold; background: white; }
+        .copy-btn { font-size: 14px; cursor: pointer; margin-right: 5px; opacity: 0.7; }
+
+        /* MODIFIED CHAT INPUT BAR */
+        .chat-input-bar { background: transparent; padding: 5px 15px 5px 5px; display: flex; align-items: center; gap: 8px; }
+        .input-box { flex: 1; padding: 12px 15px; border-radius: 50px; border: none; background: var(--input-bg); outline: none; font-size: 16px; color: var(--app-text); }
+
+        /* BALLOONS */
+        .balloon { position: absolute; bottom: -50px; width: 40px; height: 50px; background: red; border-radius: 50%; animation: floatUp 5s linear forwards; z-index: 10000; opacity: 0.9; }
+        .balloon::before { content: ''; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); width: 2px; height: 10px; background: inherit; }
+        @keyframes floatUp { 0% { bottom: -50px; transform: translateX(0); } 100% { bottom: 110%; transform: translateX(20px); opacity: 0; } }
+
+        /* MODALS */
+        #photo-menu-overlay, #modal-overlay, #delete-modal-overlay { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.8); z-index: 15000; 
+            justify-content: center; align-items: center; 
+        }
+        
+        .modal-box { 
+            background: var(--modal-bg); padding: 25px; border-radius: 15px; 
+            width: 85%; max-width: 320px; text-align: center; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+            border: 1px solid var(--border-color); 
+        }
+        
+        .modal-inp { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; background: var(--input-bg); color: var(--app-text); font-size: 16px; }
+        
+        .modal-btn { width: 100%; padding: 14px; margin-top: 10px; background: var(--app-primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor:pointer; }
+        .modal-btn.danger { background: #ef4444; } 
+        .modal-btn.action { background: #8b5cf6; color: white; }
+        .modal-btn.secondary { background: #f59e0b; color: white; }
+        .modal-btn.cancel { background: transparent; color: var(--app-text); border: 1px solid var(--border-color); }
+
+        .photo-menu-box { background: var(--app-bg); width: 280px; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.4); text-align: center; border: 1px solid var(--border-color); }
+        .pm-header { padding: 15px; font-weight: bold; color: var(--app-primary); font-size: 18px; border-bottom: 1px solid var(--border-color); background: var(--input-bg); }
+        .pm-item { padding: 15px; font-size: 16px; color: var(--app-text); border-bottom: 1px solid var(--border-color); cursor: pointer; }
+        .pm-item:active { background: var(--item-hover); }
+        .pm-cancel { padding: 15px; color: #ef4444; font-weight: bold; cursor: pointer; }
+
+        .fab { position: fixed; bottom: 85px; right: 20px; background: var(--app-primary); width: 60px; height: 60px; border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); transition: 0.2s; }
+        .fab:active { transform: scale(0.9); }
+        
+        .bottom-nav { height: 65px; border-top: 1px solid var(--border-color); background: var(--app-bg); display: flex; justify-content: space-around; align-items: center; }
+        .nav-item { text-align: center; color: gray; font-size: 11px; }
+        .nav-item.active { color: var(--app-primary); font-weight: bold; }
+        
+        /* AUTH PAGE */
+        #auth-page { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: var(--app-bg); z-index: 10000; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+        .auth-inp { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; background: var(--input-bg); color: var(--app-text); }
+        
+        #loading { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); color:var(--app-primary); z-index:11000; flex-direction:column; align-items:center; justify-content:center; font-weight:bold; }
+        #menu { display:none; position:absolute; top:50px; right:10px; background:var(--app-bg); border:1px solid var(--border-color); box-shadow:0 5px 15px rgba(0,0,0,0.1); border-radius:8px; z-index:1000; width:160px; }
+        
+        #viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 5000; flex-direction: column; justify-content: center; align-items: center; }
+        #viewer img { max-width: 100%; max-height: 80%; border: 2px solid white; display: none; }
+        #viewer-text { display: none; width: 90%; max-width: 400px; padding: 40px; text-align: center; font-size: 24px; font-weight: bold; color: white; border-radius: 20px; word-wrap: break-word; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+        
+        .edit-dp-icon { position: absolute; bottom: 0; right: 0; background: var(--app-primary); color: white; width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; border: 2px solid white; }
+
+        /* CALL CONTAINER */
+        #call-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 40000; background: #000; display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen">
+        <div class="splash-logo">ATABUR</div>
+        <div class="splash-spinner"></div>
+        <div style="margin-top: 15px; font-size: 14px; opacity: 0.8;">Connecting...</div>
+    </div>
+
+    <div id="loading"><div style="font-size:30px;">🚀</div><div id="loading-txt">Starting...</div></div>
+
+    <div id="call-container"></div> <div id="photo-menu-overlay">
+        <div class="photo-menu-box">
+            <div class="pm-header">Options</div>
+            <div class="pm-item" onclick="startDownload()">⬇️ Save to Gallery</div>
+            <div class="pm-item" onclick="startShare()">🔗 Share Link</div>
+            <div class="pm-cancel" onclick="closePhotoMenu()">Cancel</div>
+        </div>
+    </div>
+
+    <div id="delete-modal-overlay">
+        <div class="modal-box">
+            <h3 id="del-modal-title" style="margin:0 0 10px 0;">Group Options</h3>
+            <p id="del-group-name" style="color:gray; margin-bottom:20px; font-size:14px; font-weight:bold;"></p>
+            
+            <div id="del-admin-options" style="display:none;">
+                <button class="modal-btn danger" onclick="confirmDeleteAll()">🛑 Delete for Everyone</button>
+                <button class="modal-btn action" onclick="changePin()">🔑 Change PIN</button>
+                <button class="modal-btn secondary" onclick="confirmLeave()">👋 Just Remove (Leave)</button>
+            </div>
+
+            <div id="del-member-options" style="display:none;">
+                <button class="modal-btn danger" onclick="confirmLeave()">👋 Leave Group</button>
+            </div>
+
+            <button class="modal-btn cancel" onclick="closeDelModal()" style="margin-top:10px;">Cancel</button>
+        </div>
+    </div>
+
+    <div id="modal-overlay">
+        <div class="modal-box">
+            <h3 id="modal-title">Enter Info</h3>
+            <input type="text" id="modal-input-1" class="modal-inp" placeholder="Name">
+            <input type="text" id="modal-input-2" class="modal-inp" placeholder="PIN (for Groups)" style="display:none;">
+            <button id="modal-action-btn" class="modal-btn">Continue</button>
+            <div style="margin-top:15px;color:#ef4444;cursor:pointer;" onclick="closeModal()">Cancel</div>
+        </div>
+    </div>
+
+    <div id="auth-page">
+        <div style="width:100%;max-width:320px;text-align:center;">
+            <h1 style="color:var(--app-primary);">Atabur Super Chat</h1>
+            <p id="auth-title">Welcome Back</p>
+            <input type="email" id="email-in" class="auth-inp" placeholder="Email">
+            <input type="password" id="pass-in" class="auth-inp" placeholder="Password">
+            <input type="text" id="name-in" class="auth-inp" placeholder="Chat Name" style="display:none;">
+            <button style="width:100%;padding:12px;background:var(--app-primary);color:white;border:none;border-radius:8px;font-size:16px;margin-top:10px;" onclick="login()">Login</button>
+            <p style="color:#666;font-size:14px;cursor:pointer;margin-top:10px;" onclick="forgotPass()">Forgot Password?</p>
+            <p style="color:var(--app-primary);cursor:pointer;text-decoration:underline;margin-top:15px;" onclick="switchAuthMode()">Create Account</p>
+        </div>
+    </div>
+
+    <div id="main-app" style="display:none; height:100%; flex-direction:column;">
+        <div class="header">
+            <h1>Atabur Super Chat</h1>
+            <div style="font-size:20px;">
+                <span onclick="triggerFile('status')" style="margin-right:15px;">📷</span>
+                <span onclick="document.getElementById('menu').style.display='block'">⋮</span>
+            </div>
+        </div>
+        
+        <div id="menu" onclick="this.style.display='none'">
+            <div style="padding:15px; border-bottom:1px solid #eee;" onclick="shareApp()">📢 Share App</div>
+            <div style="padding:15px; color:red;" onclick="logout()">Logout</div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" id="t-chats" onclick="switchTab('chats')">CHATS</div>
+            <div class="tab" id="t-updates" onclick="switchTab('updates')">UPDATES</div>
+            <div class="tab" id="t-settings" onclick="switchTab('settings')">SETTINGS</div>
+        </div>
+
+        <div id="content">
+            <div id="page-chats" class="page active">
+                <div id="chat-list-container"></div>
+                <div style="text-align:center; margin-top:50px; color:gray;">Tap + to chat</div>
+            </div>
+
+            <div id="page-updates" class="page">
+                <div class="chat-row">
+                    <div class="st-ring" onclick="triggerFile('status')" style="border:2px dashed #ccc; font-size:24px; color:#ccc;">+</div>
+                    <div>
+                        <b>My Status</b><br>
+                        <div class="status-actions">
+                            <span class="st-btn" onclick="addTextStatus()">✍️ Type</span>
+                            <span class="st-btn" onclick="triggerFile('status')">📷 Photo</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="status-container"></div>
+            </div>
+
+            <div id="page-settings" class="page">
+                <div style="padding:30px; text-align:center;">
+                    <div class="avatar" style="width:120px; height:120px; margin:0 auto; font-size:40px; cursor:pointer;" onclick="triggerFil6e('dp')">
+                        <span id="set-avatar-txt">👤</span> 
+                        <img id="set-avatar-img" src="" style="display:none;">
+                        <div class="edit-dp-icon">📷</div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:10px;">
+                        <h2 id="set-name" style="margin:0;">User</h2>
+                        <span id="my-badge" style="color:#3b82f6; display:none;">✔️</span>
+                        <span onclick="editName()" style="cursor:pointer; font-size:18px; color:var(--app-primary); padding:5px;">✎</span>
+                    </div>
+                    <div id="set-email" style="color:gray;"></div>
+                </div>
+                <div class="setting-row" onclick="toggleDarkMode()"><b>🌙 Dark Mode</b><div>&gt;</div></div>
+                <div class="setting-row" onclick="toggleVerified()"><b>✔️ Get Verified Badge</b><div>&gt;</div></div>
+                <div class="setting-row" onclick="shareApp()"><b>📢 Share App</b><div>&gt;</div></div>
+                <div class="setting-row" onclick="localStorage.removeItem('blocked_users');location.reload();"><b>Unblock All Users</b><b style="color:blue;">RESET</b></div>
+                <div class="setting-row" style="color:red;" onclick="logout()"><b>Logout</b></div>
+            </div>
+        </div>
+
+        <div class="fab" onclick="openNewChatModal()">+</div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" id="n-chats" onclick="switchTab('chats')">💬<br>Chats</div>
+            <div class="nav-item" id="n-updates" onclick="switchTab('updates')">◎<br>Updates</div>
+            <div class="nav-item" id="n-settings" onclick="switchTab('settings')">⚙️<br>Settings</div>
+        </div>
+    </div>
+
+    <div id="page-chat-room">
+        <div class="room-header">
+            <span style="font-size:24px; margin-right:15px;" onclick="closeChat()">←</span>
+            <div class="avatar" style="width:35px; height:35px; margin-right:10px;">
+                <span id="header-av-txt">👤</span>
+                <img id="header-av-img" style="display:none;">
+                <div id="header-online-dot" class="online-dot"></div>
+            </div>
+            <div>
+                <b id="room-name">User</b> <span id="room-badge" style="color:#3b82f6; display:none;">✔️</span><br>
+                <div id="header-status" style="font-size:11px; color:gray;"></div>
+            </div>
+            <div style="margin-left:auto; display:flex; gap:15px; align-items:center;">
+                <span onclick="startZegoCall('video')" style="font-size:22px; cursor:pointer;">📹</span>
+                <span onclick="startZegoCall('audio')" style="font-size:22px; cursor:pointer;">📞</span>
+            </div>
+        </div>
+        <div id="room-msgs" class="room-body"></div>
+        
+        <div class="chat-input-bar">
+            <div style="flex: 1; display: flex; align-items: center; background: var(--input-bg); border-radius: 50px; padding: 2px 15px; margin-right: 8px;">
+                <input type="text" id="msg-in" style="flex: 1; padding: 12px 0; border: none; background: transparent; outline: none; font-size: 16px; color: var(--app-text);" placeholder="Message" oninput="toggleActionBtn()">
+                <span style="font-size:24px; color:gray; cursor:pointer; margin-left: 10px;" onclick="triggerFile('chat')">📎</span>
+            </div>
+            <button id="action-btn" onclick="handleActionClick()" style="background:#25d366; color:white; border:none; width:48px; height:48px; border-radius:50%; flex-shrink: 0; font-size: 22px; transition: transform 0.2s; cursor: pointer;">🎤</button>
+        </div>
+        </div>
+
+    <div id="viewer">
+        <span style="position:absolute;top:20px;right:20px;color:white;font-size:35px;cursor:pointer;" onclick="document.getElementById('viewer').style.display='none'">×</span>
+        <img id="view-img" src="">
+        <div id="viewer-text"></div>
+        <div id="long-press-hint" style="color:white;margin-top:20px;display:none;">👆 Long Press to Save</div>
+    </div>
+
+    <input type="file" id="file-in" style="display:none;" accept="image/*">
+    <input type="file" id="audio-in" style="display:none;" accept="audio/*">
+
+    <script src="https://unpkg.com/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+        import { getDatabase, ref, push, onChildAdded, remove, onChildRemoved, off, onValue, set, onDisconnect, serverTimestamp, get, query, limitToLast, orderByChild, endAt } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyDBM4f5EupfOVW0LrxLanWrmd3OFv72LSg", databaseURL: "https://atabur-chat-default-rtdb.firebaseio.com", projectId: "atabur-chat", appId: "1:78631981038:web:525409bba2d6dce9c188ff" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        const IMGBB_KEY = "06dd7a882f55e49d13d921c87b72ac5d";
+
+        let myName="User", myEmail="", myProfilePic=localStorage.getItem("my_dp")||"", isRegistering=false, currentChatID=null;
+        let blockedUsers = JSON.parse(localStorage.getItem("blocked_users") || "[]");
+        let activeChatRef=null, activeChatListener=null, currentGroupAdmin=null, currentMode="";
+        let selectedImgUrl = ""; 
+        
+        let targetDeleteGroup = null;
+        let targetDeleteRef = null;
+
+        function showLoading(t){document.getElementById('loading-txt').innerText=t;document.getElementById('loading').style.display='flex';}
+        function hideLoading(){document.getElementById('loading').style.display='none';}
+
+        // --- AUTH & SPLASH SCREEN LOGIC ---
+        onAuthStateChanged(auth, (user) => {
+            setTimeout(() => {
+                const splash = document.getElementById('splash-screen');
+                if(splash) {
+                    splash.style.opacity = '0';
+                    setTimeout(() => splash.style.display = 'none', 400); 
+                }
+
+                if (user) {
+                    myName = user.displayName || "User"; myEmail = user.email;
+                    document.getElementById('set-name').innerText = myName;
+                    document.getElementById('set-email').innerText = myEmail;
+                    updateMyDPUI(); 
+                    document.getElementById('auth-page').style.display = 'none';
+                    document.getElementById('main-app').style.display = 'flex';
+                    updateMyStatus(); renderChatList();
+                } else {
+                    document.getElementById('auth-page').style.display = 'flex';
+                    document.getElementById('main-app').style.display = 'none';
+                }
+            }, 600); 
+        });
+
+        function updateMyDPUI() {
+            if(myProfilePic) {
+                document.getElementById('set-avatar-img').src = myProfilePic;
+                document.getElementById('set-avatar-img').style.display = 'block';
+                document.getElementById('set-avatar-txt').style.display = 'none';
+            }
+        }
+
+        /* --- CALL LOGIC --- */
+        window.startZegoCall = async (type) => {
+            if(!currentChatID) return alert("Select a chat first");
+            
+            // Credentials from provided text/screenshot
+            const appID = 656685490;
+            const serverSecret = "6048c0309c0571fea427cf14a966e987";
+            
+            // Create a unique room ID based on the chat partner/group
+            const roomID = currentChatID.replace(/[^a-zA-Z0-9]/g, '_');
+            const userID = myName.replace(/[^a-zA-Z0-9]/g, '_') + "_" + Math.floor(Math.random() * 1000);
+            const userName = myName;
+
+            const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, roomID, userID, userName);
+            const zp = ZegoUIKitPrebuilt.create(kitToken);
+
+            document.getElementById('call-container').style.display = 'block';
+
+            zp.joinRoom({
+                container: document.querySelector("#call-container"),
+                scenario: {
+                    mode: ZegoUIKitPrebuilt.OneONoneCall, // Config as per screenshot
+                    config: { role: "Host" }
+                },
+                turnOnMicrophoneWhenJoining: true, // Config as per screenshot
+                turnOnCameraWhenJoining: type === 'video', // Config as per screenshot
+                showMyCameraToggleButton: true,
+                showMyMicrophoneToggleButton: true,
+                showAudioVideoSettingsButton: true,
+                showScreenSharingButton: true,
+                showTextChat: true,
+                showUserList: true,
+                maxUsers: 2,
+                layout: "Auto",
+                onLeaveRoom: () => {
+                    document.getElementById('call-container').style.display = 'none';
+                    zp.destroy();
+                    // --- RED BUTTON FIX ---
+                    window.location.reload(); 
+                }
+            });
+        };
+
+        window.login = async () => {
+            const e=document.getElementById("email-in").value, p=document.getElementById("pass-in").value, n=document.getElementById("name-in").value;
+            if(!e||!p) return alert("Fill all fields");
+            showLoading("Verifying...");
+            try {
+                if(isRegistering) { await createUserWithEmailAndPassword(auth,e,p); await updateProfile(auth.currentUser,{displayName:n}); }
+                else await signInWithEmailAndPassword(auth,e,p);
+            } catch(e){ alert(e.message); }
+            hideLoading();
+        };
+        window.switchAuthMode = () => { isRegistering=!isRegistering; document.querySelector("p#auth-title").innerText=isRegistering?"Register":"Login"; document.getElementById("name-in").style.display=isRegistering?"block":"none"; };
+        window.logout = () => signOut(auth);
+        
+        window.forgotPass = async () => { 
+            const e = document.getElementById("email-in").value; 
+            if(!e) return alert("Enter your email address first!"); 
+            try { 
+                await sendPasswordResetEmail(auth, e); 
+                alert("✅ Reset link sent successfully!\n\nIMPORTANT: Please check your Spam/Junk folder if you don't see the email in your Inbox."); 
+            } catch(e) { 
+                alert(e.message); 
+            } 
+        };
+        
+        window.editName = () => {
+            document.getElementById('modal-title').innerText = "Change Name";
+            document.getElementById('modal-input-1').placeholder = "Enter new name";
+            document.getElementById('modal-input-1').value = myName;
+            document.getElementById('modal-input-2').style.display = "none";
+            document.getElementById('modal-overlay').style.display = "flex";
+            modalCallback = async () => {
+                const newName = document.getElementById('modal-input-1').value.trim();
+                if(newName) {
+                    showLoading("Updating...");
+                    try { await updateProfile(auth.currentUser, { displayName: newName }); myName = newName; document.getElementById('set-name').innerText = newName; updateMyStatus(); alert("Name Updated!"); } catch(e) { alert("Error: " + e.message); }
+                    hideLoading();
+                }
+                closeModal();
+            };
+        };
+
+        function updateMyStatus() {
+            if(myName!=="User") {
+                set(ref(db, "/status/" + myName), { state: 'online', dp: myProfilePic, verified: localStorage.getItem("ver")==="true", last_seen: serverTimestamp() });
+                onDisconnect(ref(db, "/status/" + myName)).set({ state: 'offline', dp: myProfilePic, verified: localStorage.getItem("ver")==="true", last_seen: serverTimestamp() });
+            }
+        }
+        window.toggleVerified = () => { let v=localStorage.getItem("ver")==="true"; localStorage.setItem("ver",!v); updateMyStatus(); alert(v?"Removed":"Added!"); if(!v)document.getElementById('my-badge').style.display='inline'; else document.getElementById('my-badge').style.display='none'; };
+        if(localStorage.getItem("ver")==="true") document.getElementById('my-badge').style.display='inline';
+        
+        window.switchTab = (t) => { document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active')); document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active')); document.getElementById('page-'+t).classList.add('active'); if(document.getElementById('t-'+t))document.getElementById('t-'+t).classList.add('active'); if(document.getElementById('n-'+t))document.getElementById('n-'+t).classList.add('active'); document.querySelector('.fab').style.display=(t==='chats')?'flex':'none'; };
+        window.toggleDarkMode = () => { let d=document.documentElement.getAttribute('data-theme')==='dark'; document.documentElement.setAttribute('data-theme', d?'light':'dark'); localStorage.setItem("dark_mode", !d); };
+        if(localStorage.getItem("dark_mode")==="true") document.documentElement.setAttribute('data-theme','dark');
+
+        let modalCallback = null;
+        window.openNewChatModal = () => {
+            document.getElementById('modal-title').innerText = "Create New";
+            document.getElementById('modal-input-1').placeholder = "Enter Chat/Group Name";
+            document.getElementById('modal-input-1').value = "";
+            document.getElementById('modal-input-2').style.display = "block"; 
+            document.getElementById('modal-input-2').placeholder = "4-Digit PIN (Only for Groups)";
+            document.getElementById('modal-input-2').value = "";
+            document.getElementById('modal-overlay').style.display = "flex";
+            modalCallback = async () => {
+                let name = document.getElementById('modal-input-1').value.trim();
+                let pin = document.getElementById('modal-input-2').value.trim();
+                if(!name) return alert("Name required");
+                
+                showLoading("Creating...");
+
+                try {
+                    if(pin.length > 0) {
+                        let s = await get(ref(db, 'groups/' + name));
+                        if(s.exists()) {
+                            if(s.val().admin === myEmail) { 
+                                alert("Admin Verified. Group Recovered!"); 
+                                addToChatList(name); closeModal(); hideLoading(); return; 
+                            }
+                            hideLoading(); return alert("Group name taken!");
+                        }
+                        await set(ref(db, 'groups/' + name), { admin: myEmail, pin: pin, created_by: myName });
+                    }
+                    addToChatList(name);
+                    closeModal();
+                } catch(e) {
+                    alert("Error: " + e.message);
+                }
+                hideLoading();
+            };
+        };
+
+        window.openPinModal = (name, correctPin) => {
+             document.getElementById('modal-title').innerText = "Enter Group PIN";
+             document.getElementById('modal-input-1').style.display = "none";
+             document.getElementById('modal-input-2').style.display = "block";
+             document.getElementById('modal-input-2').placeholder = "Enter PIN";
+             document.getElementById('modal-input-2').value = "";
+             document.getElementById('modal-overlay').style.display = "flex";
+             modalCallback = () => {
+                 let p = document.getElementById('modal-input-2').value.trim();
+                 if(p === correctPin) { sessionStorage.setItem("unlocked_" + name, "true"); closeModal(); openChat(name); } else { alert("Wrong PIN!"); }
+             };
+        };
+        document.getElementById('modal-action-btn').onclick = () => { if(modalCallback) modalCallback(); };
+        window.closeModal = () => { document.getElementById('modal-overlay').style.display = "none"; document.getElementById('modal-input-1').style.display = "block"; };
+
+        function addToChatList(name) { let c=JSON.parse(localStorage.getItem("my_chats")||"[]"); if(!c.includes(name))c.push(name); localStorage.setItem("my_chats",JSON.stringify(c)); renderChatList(); }
+
+        function renderChatList() {
+            const list = document.getElementById('chat-list-container');
+            let chats = JSON.parse(localStorage.getItem("my_chats") || "[]");
+            list.innerHTML = "";
+            let g = document.createElement('div'); g.className='chat-row'; g.onclick=()=>openChat('Global Group');
+            g.innerHTML=`<div class="avatar">G</div><div class="chat-info"><b>Global Group</b></div>`;
+            list.appendChild(g);
+
+            chats.forEach(name => {
+                let safeId = "id_" + name.replace(/[^a-zA-Z0-9]/g, '_'); 
+                let div = document.createElement('div'); div.className='chat-row'; div.onclick=()=>openChat(name);
+                div.innerHTML = `
+                    <div class="avatar"><span id="t-${safeId}">${name.charAt(0)}</span><img id="i-${safeId}" style="display:none;"><div id="d-${safeId}" class="online-dot"></div></div>
+                    <div class="chat-info"><span class="chat-name">${name} <span id="l-${safeId}" style="display:none;font-size:12px;margin-left:5px;">🔒</span></span><div id="ls-${safeId}" class="last-seen"></div></div>
+                    <div style="color:red;padding:10px;" onclick="event.stopPropagation();delChat('${name}')">🗑️</div>`;
+                list.appendChild(div);
+                
+                get(ref(db, 'groups/' + name)).then(snap => { 
+                    if(snap.exists() && snap.val().pin) {
+                        let lockIcon = document.getElementById(`l-${safeId}`);
+                        if(lockIcon) lockIcon.style.display = 'inline'; 
+                    }
+                });
+                
+                onValue(ref(db, '/status/' + name), (snap) => {
+                    const s = snap.val();
+                    let dot = document.getElementById(`d-${safeId}`);
+                    let lastSeen = document.getElementById(`ls-${safeId}`);
+                    let img = document.getElementById(`i-${safeId}`);
+                    let txt = document.getElementById(`t-${safeId}`);
+                    if(s && dot && lastSeen) {
+                        if(s.state === 'online') { dot.style.display='block'; lastSeen.innerText="Online"; lastSeen.style.color="#22c55e"; }
+                        else { dot.style.display='none'; if(s.last_seen) lastSeen.innerText=new Date(s.last_seen).toLocaleDateString(); }
+                        if(s.dp && img && txt) { img.src=s.dp; img.style.display='block'; txt.style.display='none'; }
+                    }
+                });
+            });
+        }
+        
+        window.delChat = async (name) => {
+            targetDeleteGroup = name;
+            targetDeleteRef = ref(db, 'groups/' + name);
+            
+            document.getElementById('del-group-name').innerText = name;
+            document.getElementById('del-admin-options').style.display = 'none';
+            document.getElementById('del-member-options').style.display = 'none';
+            document.getElementById('delete-modal-overlay').style.display = 'flex';
+
+            showLoading("Checking...");
+            let snap = await get(targetDeleteRef);
+            hideLoading();
+
+            if (!snap.exists() || (snap.val() && snap.val().admin === myEmail)) {
+                document.getElementById('del-admin-options').style.display = 'block';
+            } else {
+                document.getElementById('del-member-options').style.display = 'block';
+            }
+        };
+
+        window.confirmDeleteAll = async () => {
+            if(confirm("⚠ PERMANENT ACTION!\nThis will delete the group and chat history for EVERYONE.\nAre you sure?")) {
+                await remove(targetDeleteRef); 
+                await remove(ref(db, 'chats/' + targetDeleteGroup)); 
+                confirmLeave(); 
+            }
+        };
+
+        window.changePin = async () => {
+            let newPin = prompt("🔑 Enter NEW PIN:");
+            if(newPin && newPin.length > 0) {
+                await set(ref(db, 'groups/' + targetDeleteGroup + '/pin'), newPin);
+                alert("✅ PIN Changed Successfully!");
+                closeDelModal();
+            }
+        };
+
+        window.confirmLeave = () => {
+            let c = JSON.parse(localStorage.getItem("my_chats") || "[]");
+            c = c.filter(x => x !== targetDeleteGroup);
+            localStorage.setItem("my_chats", JSON.stringify(c));
+            renderChatList();
+            closeDelModal();
+        };
+
+        window.closeDelModal = () => {
+            document.getElementById('delete-modal-overlay').style.display = 'none';
+        }
+
+        window.openChat = async (name) => {
+            if(name === 'Global Group') { loadChatUI(name); return; }
+            showLoading("Securing...");
+            try {
+                let groupSnap = await get(ref(db, 'groups/' + name));
+                hideLoading();
+                if(groupSnap.exists()) {
+                    const gd = groupSnap.val();
+                    if(gd.banned && gd.banned[myName.replace('.','')]) { alert("🚫 You are BANNED!"); return; }
+                    currentGroupAdmin = gd.admin;
+                    let unlocked = sessionStorage.getItem("unlocked_" + name);
+                    if (gd.pin && myEmail !== gd.admin && unlocked !== "true") {
+                        openPinModal(name, gd.pin);
+                        return; 
+                    }
+                } else { currentGroupAdmin = null; }
+                
+                const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
+                const oldMsgQuery = query(ref(db, 'chats/' + name), orderByChild('time'), endAt(cutoff));
+                get(oldMsgQuery).then((snap) => { 
+                    if(snap.exists()) { snap.forEach(child => remove(child.ref)); }
+                });
+
+                loadChatUI(name);
+            } catch(e) { hideLoading(); alert("Check Internet."); }
+        };
+
+        function triggerCelebration() {
+            const colors = ['red', 'blue', 'gold', 'green', 'purple', 'orange', 'pink'];
+            for(let i=0; i<30; i++) {
+                let b = document.createElement('div');
+                b.className = 'balloon';
+                b.style.left = Math.random() * 100 + "vw";
+                b.style.background = colors[Math.floor(Math.random() * colors.length)];
+                b.style.animationDuration = (3 + Math.random() * 3) + 's';
+                document.body.appendChild(b);
+                setTimeout(() => b.remove(), 6000);
+            }
+        }
+
+        function loadChatUI(name) {
+            currentChatID = name; document.getElementById('room-name').innerText = name;
+            document.getElementById('page-chat-room').style.display = 'flex'; document.getElementById('room-msgs').innerHTML = "";
+            document.getElementById('header-av-txt').style.display = 'block'; document.getElementById('header-av-img').style.display = 'none';
+            get(ref(db, '/status/' + name)).then(s => { if(s.exists() && s.val().dp) { document.getElementById('header-av-img').src = s.val().dp; document.getElementById('header-av-img').style.display = 'block'; document.getElementById('header-av-txt').style.display = 'none'; } });
+
+            if(activeChatRef) off(activeChatRef, 'child_added', activeChatListener);
+            
+            const chatQuery = query(ref(db, 'chats/' + name), limitToLast(50));
+            
+            activeChatListener = (snap) => {
+                const m = snap.val(); if(blockedUsers.includes(m.sender)) return;
+                
+                if(m.text && (m.text.toLowerCase().includes("happy birthday") || m.text.toLowerCase().includes("hbd") || m.text.toLowerCase().includes("janmdin"))) {
+                    triggerCelebration();
+                }
+
+                const isMe = m.sender === myName; const isAdmin = (myEmail === currentGroupAdmin);
+                const row = document.createElement('div'); row.className = `msg-row ${isMe ? 'me' : 'other'}`;
+                row.id = snap.key;
+                
+                let content = `<div class="msg-bubble">`;
+                if(!isMe) {
+                    content += `<div style="font-size:10px;font-weight:bold;color:var(--app-primary);margin-bottom:2px;">${m.sender}`;
+                    if(isAdmin) content += `<span class="kick-btn" onclick="kickUser('${name}','${m.sender}')">Kick</span>`;
+                    content += `</div>`;
+                }
+                content += `${m.text}`;
+                if(m.img) content += `<br><img src="${m.img}" oncontextmenu="openPhotoMenu(event, '${m.img}');return false;" onclick="openViewer('${m.img}', 'img')">`;
+                if(m.audio) content += `<br><audio controls src="${m.audio}"></audio>`;
+                
+                content += `<div class="msg-footer">`;
+                if(m.text && !m.img && !m.audio) { content += `<span class="copy-btn" onclick="copyMsg('${m.text.replace(/'/g, "\\'")}')">Copy </span>`; }
+
+                if(isMe) { content += `<span class="blue-ticks">✓✓</span> <span class="del-btn" onclick="deleteMsg('chats/${name}/${snap.key}', '${snap.key}')">🗑️</span>`; } 
+                else { content += `<span class="del-btn" style="color:gray;" onclick="reportUser('${m.sender}', '${snap.key}')">Report</span>`; }
+                content += `</div></div>`;
+
+                let avatarHTML = `<div class="msg-avatar">${m.sender[0]}</div>`;
+                if(m.profilePic) avatarHTML = `<div class="msg-avatar"><img src="${m.profilePic}"></div>`;
+                row.innerHTML = isMe ? content : (avatarHTML + content);
+                document.getElementById('room-msgs').appendChild(row); document.getElementById('room-msgs').scrollTop = document.getElementById('room-msgs').scrollHeight;
+            };
+            
+            onChildAdded(chatQuery, activeChatListener);
+            onChildRemoved(ref(db, 'chats/' + name), (snap) => { const el = document.getElementById(snap.key); if(el) el.remove(); });
+        };
+
+        // --- YAHAN JADU WALA JAVASCRIPT HAI (MAGIC BUTTON CODE) ---
+        window.toggleActionBtn = () => {
+            const inp = document.getElementById('msg-in');
+            const btn = document.getElementById('action-btn');
+            if(inp.value.trim().length > 0) {
+                // Agar kuch likha hai, to Send (➤) ban jao
+                btn.innerText = '➤';
+                btn.style.background = 'var(--app-primary)'; // Blue color
+            } else {
+                // Agar khali hai, to Wapas Mic (🎤) ban jao
+                btn.innerText = '🎤';
+                btn.style.background = '#25d366'; // WhatsApp Green color
+            }
+        };
+
+        window.handleActionClick = () => {
+            const btn = document.getElementById('action-btn');
+            if(btn.innerText === '➤') {
+                sendMsg(); // Send message call
+                toggleActionBtn(); // Reset button back to Mic
+            } else {
+                triggerAudio(); // Voice record call
+            }
+        };
+        // --- JADU KHATAM ---
+
+        window.copyMsg = (txt) => { navigator.clipboard.writeText(txt).then(() => { alert("Copied!"); }); };
+        window.closeChat = () => { document.getElementById('page-chat-room').style.display='none'; };
+        window.sendMsg = () => { const inp = document.getElementById('msg-in'); if(inp.value) { push(ref(db, 'chats/' + currentChatID), { sender: myName, profilePic: myProfilePic, text: inp.value, time: Date.now() }); inp.value=""; } };
+        window.kickUser = async (g, u) => { if(confirm("Kick "+u+"?")) { await set(ref(db, 'groups/'+g+'/banned/'+u.replace('.','')), true); push(ref(db, 'chats/'+g), { sender: "System", text: `🚫 ${u} removed.`, time: Date.now() }); } };
+        window.shareApp = () => { if(navigator.share) navigator.share({title:'Chat App', text:'Download: https://apk.e-droid.net/apk/app3869610-hx8uoe.apk?v=4'}); else alert("Link copied!"); };
+        
+        window.triggerFile = (m) => { currentMode=m; document.getElementById('file-in').click(); };
+        document.getElementById('file-in').onchange = (e) => {
+            let f=e.target.files[0]; if(!f)return; showLoading("Uploading...");
+            let r = new FileReader(); r.readAsDataURL(f);
+            r.onload = async () => {
+                let b64 = r.result.split(',')[1]; let fd = new FormData(); fd.append("image", b64);
+                try {
+                    let res = await fetch("https://api.imgbb.com/1/upload?key="+IMGBB_KEY, {method:"POST", body:fd}); let d = await res.json();
+                    if(d.success) {
+                        const url = d.data.url;
+                        if(currentMode==='chat') push(ref(db, 'chats/'+currentChatID), { sender: myName, profilePic: myProfilePic, text: "📷 Photo", img: url, time: Date.now() });
+                        else if(currentMode==='dp') { myProfilePic=url; localStorage.setItem("my_dp", myProfilePic); updateMyDPUI(); updateMyStatus(); alert("DP Updated!"); }
+                        else push(ref(db, 'statuses'), { user: myName, type: 'img', val: url, time: Date.now() });
+                    }
+                } catch(e){alert("Error uploading");} hideLoading();
+            };
+        };
+        window.triggerAudio = () => { document.getElementById('audio-in').click(); };
+        document.getElementById('audio-in').onchange = (e) => { let f = e.target.files[0]; if(!f)return; showLoading("Sending..."); let r = new FileReader(); r.readAsDataURL(f); r.onloadend = () => { push(ref(db, 'chats/' + currentChatID), { sender: myName, profilePic: myProfilePic, text: "🎤 Voice", audio: r.result, time: Date.now() }); hideLoading(); }; };
+        
+        window.addTextStatus = () => {
+            let text = prompt("Write status:");
+            if(text) {
+                const colors = ['#FF5733', '#33FF57', '#3357FF', '#F033FF', '#33FFF5', '#FFA500', '#800080'];
+                const bg = colors[Math.floor(Math.random()*colors.length)];
+                push(ref(db, 'statuses'), { user: myName, type: 'text', val: text, bg: bg, time: Date.now() });
+            }
+        }
+
+        window.openPhotoMenu = (e, url) => { e.preventDefault(); selectedImgUrl = url; document.getElementById('photo-menu-overlay').style.display = 'flex'; };
+        window.closePhotoMenu = () => { document.getElementById('photo-menu-overlay').style.display = 'none'; };
+        window.startDownload = () => { if(!selectedImgUrl) return; var a = document.createElement('a'); a.href = selectedImgUrl; a.download = "Atabur_Img_" + Date.now(); a.target = "_blank"; document.body.appendChild(a); a.click(); document.body.removeChild(a); closePhotoMenu(); };
+        window.startShare = async () => { if(!selectedImgUrl) return; if(navigator.share) { try { await navigator.share({title:'Photo', text:'Check this photo', url: selectedImgUrl}); } catch(e){} } else { prompt("Copy Link:", selectedImgUrl); } closePhotoMenu(); };
+        
+        window.openViewer = (val, type, bg) => {
+            const vImg = document.getElementById('view-img'); const vTxt = document.getElementById('viewer-text'); const hint = document.getElementById('long-press-hint');
+            if(type === 'img') { vImg.src = val; vImg.style.display = 'block'; vTxt.style.display = 'none'; hint.style.display = 'block'; vImg.oncontextmenu = (e) => { openPhotoMenu(e, val); return false; }; }
+            else { vImg.style.display = 'none'; hint.style.display = 'none'; vTxt.style.display = 'block'; vTxt.innerText = val; vTxt.style.backgroundColor = bg || '#333'; }
+            document.getElementById('viewer').style.display = 'flex';
+        };
+
+        window.deleteMsg = (path, id) => { const el = document.getElementById(id); if(el) el.style.display = 'none'; remove(ref(db, path)); };
+        window.deleteStatus = (key) => { remove(ref(db, 'statuses/' + key)); };
+        
+        onChildAdded(ref(db, 'statuses'), (s) => {
+            let v=s.val(); if(blockedUsers.includes(v.user))return;
+            if (Date.now() - (v.time || 0) > 24 * 60 * 60 * 1000) { remove(ref(db, 'statuses/' + s.key)); return; }
+            let d=document.createElement('div'); d.className='chat-row'; d.id='status-'+s.key;
+            let delBtn = v.user === myName ? `<span style="margin-left:auto;color:red;cursor:pointer;font-size:20px;" onclick="deleteStatus('${s.key}')">🗑️</span>` : '';
+            let thumb = (v.type === 'text') ? `<div class="st-ring" onclick="openViewer('${v.val}', 'text', '${v.bg}')"><div class="st-text-preview" style="background:${v.bg}">${v.val.substring(0,2)}..</div></div>` : `<div class="st-ring" onclick="openViewer('${v.val||v.img}', 'img')"><img src="${v.val||v.img}" class="st-img"></div>`;
+            d.innerHTML = `${thumb}<div><b>${v.user}</b><br><small>Tap to view</small></div>${delBtn}`;
+            document.getElementById('status-container').prepend(d);
+        });
+        onChildRemoved(ref(db, 'statuses'), (s) => { let el=document.getElementById('status-'+s.key); if(el)el.remove(); });
+    </script>
+</body>
+</html>
+
+
+
+
