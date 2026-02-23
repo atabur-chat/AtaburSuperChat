@@ -237,7 +237,7 @@
 
             <div id="page-settings" class="page">
                 <div style="padding:30px; text-align:center;">
-                    <div class="avatar" style="width:120px; height:120px; margin:0 auto; font-size:40px; cursor:pointer;" onclick="triggerFil6e('dp')">
+                    <div class="avatar" style="width:120px; height:120px; margin:0 auto; font-size:40px; cursor:pointer;" onclick="triggerFile('dp')">
                         <span id="set-avatar-txt">👤</span> 
                         <img id="set-avatar-img" src="" style="display:none;">
                         <div class="edit-dp-icon">📷</div>
@@ -364,41 +364,27 @@
         window.startZegoCall = async (type) => {
             if(!currentChatID) return alert("Select a chat first");
             
-            // Credentials from provided text/screenshot
             const appID = 656685490;
             const serverSecret = "6048c0309c0571fea427cf14a966e987";
-            
-            // Create a unique room ID based on the chat partner/group
             const roomID = currentChatID.replace(/[^a-zA-Z0-9]/g, '_');
             const userID = myName.replace(/[^a-zA-Z0-9]/g, '_') + "_" + Math.floor(Math.random() * 1000);
-            const userName = myName;
 
-            const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, roomID, userID, userName);
+            const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, roomID, userID, myName);
             const zp = ZegoUIKitPrebuilt.create(kitToken);
 
             document.getElementById('call-container').style.display = 'block';
 
             zp.joinRoom({
                 container: document.querySelector("#call-container"),
-                scenario: {
-                    mode: ZegoUIKitPrebuilt.OneONoneCall, // Config as per screenshot
-                    config: { role: "Host" }
-                },
-                turnOnMicrophoneWhenJoining: true, // Config as per screenshot
-                turnOnCameraWhenJoining: type === 'video', // Config as per screenshot
+                scenario: { mode: ZegoUIKitPrebuilt.OneONoneCall },
                 showMyCameraToggleButton: true,
-                showMyMicrophoneToggleButton: true,
                 showAudioVideoSettingsButton: true,
-                showScreenSharingButton: true,
-                showTextChat: true,
-                showUserList: true,
-                maxUsers: 2,
-                layout: "Auto",
                 onLeaveRoom: () => {
+                    // --- YE HAI POWER FIX ---
                     document.getElementById('call-container').style.display = 'none';
-                    zp.destroy();
-                    // --- RED BUTTON FIX ---
-                    window.location.reload(); 
+                    if (zp) zp.destroy();
+                    // Call kat-te hi page ko zabardasti refresh karega
+                    window.location.replace(window.location.href); 
                 }
             });
         };
@@ -776,7 +762,5 @@
     </script>
 </body>
 </html>
-
-
 
 
